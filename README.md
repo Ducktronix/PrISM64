@@ -24,9 +24,13 @@ An Arduino Mega2560 is the required processor of the system and connects inside 
 
 This system designe will allow users to create all sorts of cool gadgets using the PrISM64. How about a Wi-Fi Sprinkler controller that plays Daft Punk while an eight-column color equalizer bar goes spaztik?!?!
 
+
+
 ==== REPOSITORY INFO ====
-Files are broken into four specific folders 1) Hardware, 2) Software, 3) Documentation and 4)Issues
+Files are broken into three specific folders 1) Hardware, 2) Software, and 3) Documentation 
 Please, do not alter a file unless you have permission from the person working on it.  Otherwise, feel free to make a copy and alter the file under a new name.
+
+
 
 
 === HARDWARE FILES ===
