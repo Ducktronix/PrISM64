@@ -29,4 +29,6 @@ Files are broken into four specific folders 1) Hardware, 2) Software, 3) Documen
 Please, do not alter a file unless you have permission from the person working on it.  Otherwise, feel free to make a copy and alter the file under a new name.
 
 
-MORE HERE............................
+=== HARDWARE FILES ===
+You can download a free SolidWorks compatible viewer, "e-drawings" at:  http://www.edrawingsviewer.com/ed/download.htm   
+
