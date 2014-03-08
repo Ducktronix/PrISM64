@@ -66,14 +66,14 @@ ISR (SPI_STC_vect)
 		SPDR = value;	//Send the value to the next board in the system.
 	}
 	//If the board is in command mode we need to set the NUM_BOARDS parameter
-	if(command_mode){
-		if(value > 0 && value < 9){	//Make sure we get a number between 0 and 8
-			NUM_BOARDS=value;	//Set the NUM_BOARDS parameter for this matrix.	
-			SPDR = (value-1);	//Send the NUM_BOARDS parameter to the next board in the system
-			write_to_EEPROM(NUM_BOARDS_ADDRESS, NUM_BOARDS);	//Save the NUM_BOARDS to EEPROM
-		}
-		command_mode=0;	//Reset the command_mode flag
-	}
+	//if(command_mode){
+		//if(value > 0 && value < 9){	//Make sure we get a number between 0 and 8
+			//NUM_BOARDS=value;	//Set the NUM_BOARDS parameter for this matrix.	
+			//SPDR = (value-1);	//Send the NUM_BOARDS parameter to the next board in the system
+			//write_to_EEPROM(NUM_BOARDS_ADDRESS, NUM_BOARDS);	//Save the NUM_BOARDS to EEPROM
+		//}
+		//command_mode=0;	//Reset the command_mode flag
+	//}
 	//If we get the '%' character we should enter command mode.    //DISABLED THE COMMAND MODE HWQ
 	//if(value == '%'){
 	//	command_mode=1;

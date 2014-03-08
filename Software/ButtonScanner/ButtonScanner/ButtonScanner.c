@@ -77,9 +77,9 @@ int prev_potState[4];
 unsigned char prev_ArcadeBtnState;
 int sensorBuffer[13];
 unsigned char btnPressed =0;
-unsigned int samples = 8; // default value for Button Matrix/ArcadeButtons.   de-bounce/scan samples to take for each scan cycle per button, 
-							//can be changed by sending SPI byte 1-80 dec. (10 to 800 samples per button, per scan)
-unsigned char analogSamples = 8; // this is the default number of ADC samples to take each scan for the Potentiometers
+unsigned int samples = 5; // default value for Button Matrix/ArcadeButtons.   de-bounce/scan samples to take for each scan cycle per button, 
+							//can be changed by sending SPI byte 0x12-0x1E dec. (5 to 65 samples per button, per scan)
+unsigned char analogSamples = 5; // this is the default number of ADC samples to take each scan for the Potentiometers
 
 unsigned int potScanDecay = 400;  // this is the number of program cycles to stay in potentiometer fine adjust mode (i.e. +/- 1)
 int potScanDelta = 2;  // this is the measured +/- delta (i.e. wake up) a pot must have to send an interrupt when NOT in fine adjust mode (i.e. the flutter to avoid)
@@ -99,14 +99,14 @@ ISR (SPI_STC_vect)
 {
 	cli();	//Halt Interrupts
 	value=SPDR;	//Get the data from the SPI bus
-		if (value==0xAA)      // this means the Master is requesting a new 64 button status message
+		if (value==0x10)      // this means the Master is requesting a new 64 button status message
 		{frame_index = 0; SPDR = sensorBuffer[frame_index++];PORTB &= ~(1<<INTRPT_OUT);}  // clear the interrupt line if the request is received
-		if (value==0xFF)      // this means the Master is pushing the data through the SPI register to receive the 64 button status message
+		if (value==0x11)      // this means the Master is pushing the data through the SPI register to receive the 64 button status message
 		{SPDR = sensorBuffer[frame_index++];}
-		if (value==0x55)      // reset the AVR if commanded by the SPI Master
+		if (value==0x1F)      // reset the AVR if commanded by the SPI Master
 		{Reset_AVR();} 
-		if (value > 0 && value < 81) // this means the Master is resetting the Sample input value from the default value, 
-		{samples = value*10 ;}//the amount of samples for every increment.  allowable 1-80 (samples = value*10) 10-800 samples allowed.
+		if (value > 0x11 && value < 0x1F ) // this means the Master is resetting the Sample input value from the default value, to
+		{samples = (value-17)*5 ;}// (value-17)*5 = [[5-65 possible values]]
 			
 	sei();	//Re-enable interrupts
 }
