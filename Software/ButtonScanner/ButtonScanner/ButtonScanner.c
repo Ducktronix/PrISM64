@@ -15,10 +15,10 @@ Principle of Operation:
 This Atmel AVR ATMega32A powered Button Scanner will control a traditional 8x8 matrix of buttons/switches.  Each button should have a diode wired in series
 to ensure proper operation.  The micro-controller sets the 'ground' side of the button 'rows' in a pull-up INPUT configuration seeking ground.  
 One 'column' at a time, the AVR changes an OUTPUT from a HIGH (normal) to a LOW to determine if any row/column button is pressed.  
-If a pressed condition exists, then the AVR stores that row/col location into a buffer to be passed over SPI lupon request from the Master.  
+If a pressed condition exists, then the AVR stores that row/col location into a buffer to be passed over SPI upon request from the Master.  
 Also, the code checks to see if the button state is different than the last time (i.e. just pressed, or just released) and, if so, 
-sets an outbound interrupt line HIGH. The Master device should check for the interrupt line at a frequent rate, and if detected, should then 
-send the 0xAA byte over SPI to begin the button state message transfer. When the AVR receives the 0XAA byte it resets the interrupt line LOW.  
+sets an outbound interrupt line LOW. The Master device should check for the interrupt line at a frequent rate, and if detected, should then
+send the 0xAA byte over SPI to begin the button state message transfer. When the AVR receives the 0XAA byte it resets the interrupt line HIGH.  
 The Master device should follow up with 0xFF bytes used to push the remaining data out of the buffer.  
 The data from the buffer is 8 bytes long, sent by row, MSB first.  So, the first byte retrieved will be Row 0, then Row1...Row 7.And that is the last byte.
 Each of the 8 bit positions represents a column, where a 0 represents NOT-PRESSED, and a 1 represents PRESSED buttons.
@@ -100,7 +100,7 @@ ISR (SPI_STC_vect)
 	cli();	//Halt Interrupts
 	value=SPDR;	//Get the data from the SPI bus
 		if (value==0x10)      // this means the Master is requesting a new 64 button status message
-		{frame_index = 0; SPDR = sensorBuffer[frame_index++];PORTB &= ~(1<<INTRPT_OUT);}  // clear the interrupt line if the request is received
+		{frame_index = 0; SPDR = sensorBuffer[frame_index++]; PORTB |= (1<<INTRPT_OUT);}  // clear the interrupt line HIGH if the request is received
 		if (value==0x11)      // this means the Master is pushing the data through the SPI register to receive the 64 button status message
 		{SPDR = sensorBuffer[frame_index++];}
 		if (value==0x1F)      // reset the AVR if commanded by the SPI Master
@@ -119,7 +119,8 @@ void ioinit (void)
 	//1 = Output, 0 = Input
 	DDRB = (1<<MISO) | (1<<INTRPT_OUT);	//Set MISO and Interrupt Outbound as an output, all other SPI as inputs
 	PORTB = (1<<MOSI)|(1<<CS)|(1<<SCK);	//Enable pull-ups on SPI Lines
-	PORTB &= ~(1<<INTRPT_OUT); //set Interrupt Outbound output low
+	
+	PORTB |= (1<<INTRPT_OUT); //set Interrupt Outbound output HIGH, "clear"
 	//PortB Pins B0, B1, B2 are reserved
 	
 	DDRA =0X00;	//Set PORTA as an input 
@@ -215,7 +216,9 @@ int main (void)
 
 	//send the pot value at startup one time
 	scanPots ();
-	PORTB |= (1<<INTRPT_OUT);
+	
+	PORTB &= ~(1<<INTRPT_OUT); // signal the Master to retrieve the initial pot data
+	//PORTB |= (1<<INTRPT_OUT);
 
 	//set the prev_potState to the current for the next time around
 	prev_potState[0] = potState[0];
@@ -238,7 +241,7 @@ int main (void)
 					    else {sensorBuffer[row] &= ~(1<<col); // set the RELEASED 0 value in the buffer	
 							buttonState[col+(row*8)] = 0;}// set the RELEASED 0 value locally
 						if ((buttonState[col+(row*8)] == 1 && prev_buttonState[col+(row*8)] == 0) || (buttonState[col+(row*8)] == 0 && prev_buttonState[col+(row*8)] == 1)) 
-							{PORTB |= (1<<INTRPT_OUT);} // if the button scanned condition is different than the last scan, activate the interrupt line
+							{PORTB &= ~(1<<INTRPT_OUT);} // if the button scanned condition is different than the last scan, activate the interrupt line
 							prev_buttonState[col+(row*8)] = buttonState[col+(row*8)]; // set the previous state to the recent state for next time around
 							}
 						}
@@ -256,7 +259,7 @@ int main (void)
 						potState[1] < (prev_potState[1]-potScanDelta)  || potState[1] > (prev_potState[1]+potScanDelta) ||
 						potState[2] < (prev_potState[2]-potScanDelta)  || potState[2] > (prev_potState[2]+potScanDelta) ||
 						potState[3] < (prev_potState[3]-potScanDelta)  || potState[3] > (prev_potState[3]+potScanDelta))
-							{PORTB |= (1<<INTRPT_OUT); potFineAdjMode = 1; decay=potScanDecay;
+							{PORTB &= ~(1<<INTRPT_OUT); potFineAdjMode = 1; decay=potScanDecay;
 								//set the prev_potState to the current for the next time around
 								prev_potState[0] = potState[0];
 								prev_potState[1] = potState[1];
@@ -273,7 +276,7 @@ int main (void)
 					//if so raise the interrupt line to signal the Master to request the state message
 					if (potState[0] != prev_potState[0] || potState[1] != prev_potState[1] || 
 						potState[2] != prev_potState[2] || potState[3] != prev_potState[3])	
-						{PORTB |= (1<<INTRPT_OUT);						
+						{PORTB &= ~(1<<INTRPT_OUT);						
 							//set the prev_potState to the current for the next time around
 							prev_potState[0] = potState[0];
 							prev_potState[1] = potState[1];
@@ -288,7 +291,7 @@ int main (void)
 				getArcadeButton(ABTN1,0); getArcadeButton(ABTN2,1); getArcadeButton(ABTN3,2); getArcadeButton(ABTN4,3); 
 		
 				if (sensorBuffer[12] != prev_ArcadeBtnState)
-				{PORTB |= (1<<INTRPT_OUT); // if the button scanned condition is different than the last scan, activate the interrupt line
+				{PORTB &= ~(1<<INTRPT_OUT); // if the button scanned condition is different than the last scan, activate the interrupt line
 				prev_ArcadeBtnState = sensorBuffer[12];} // set the previous state to the recent state for next time around		
 	}
 	

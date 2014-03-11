@@ -136,7 +136,7 @@ ISR (SPI_STC_vect)
 		//Check for Sensor Commands
 		
 		if (value==REQSTAT)      // this means the Master is requesting a new sensor status message, acknowledging the interrupt
-		{frame_index = 0; SPDR = sensorBuffer[frame_index++]; PORTB &= ~(1<<INTRPT_OUT);}  // clear the interrupt line if the request is received
+		{frame_index = 0; SPDR = sensorBuffer[frame_index++];PORTB |= (1<<INTRPT_OUT); }  // clear the interrupt line HIGH if the request is received
 		if (value==PSHSTA)      // this means the Master is pushing the data through the SPI register to receive the sensor status message
 		{SPDR = sensorBuffer[frame_index++];}
 		if (value==RSTAVR)      // reset the AVR if commanded by the SPI Master
@@ -181,7 +181,7 @@ void ioinit (void)
 														//OC0 Timer0 PWM as an output for the LED Back-light, 
 														//all other SPI as inputs
 	PORTB = (1<<MOSI)|(1<<CS)|(1<<SCK)|(1<<RENC3BTN)|(1<<RENC4BTN);	//Enable pull-ups on SPI Lines & Button Inputs
-	PORTB &= ~(1<<INTRPT_OUT); //set Interrupt Outbound output low
+	PORTB |= (1<<INTRPT_OUT); //set Interrupt Outbound output HIGH
 		
 	
 	DDRC = 0xFF;	//Set all of PORTC as output for the LCD (C7 unused, reserved)
@@ -326,12 +326,10 @@ void setLCDBrightness(unsigned char brightness)
 
 void updateLCDCursor()
 {//this function recalculates the cursor for the display
-//if (LCD_Cursor==-1) {LCD_Cursor=79;} // move the cursor pointer to Row2 location
-//if (LCD_Cursor==63) {LCD_Cursor=15;}	// move the cursor pointer to Row1 location
-//if (LCD_Cursor==16) {LCD_Cursor=64;} // move the cursor pointer to Row2 location
-//if (LCD_Cursor==80) {LCD_Cursor=0;}	// move the cursor pointer to Row1 location	
+if (LCD_Cursor==-1) {LCD_Cursor=31;} // move the cursor pointer to Row2 location
+if (LCD_Cursor==32) {LCD_Cursor=0;}	// move the cursor pointer to Row1 location	
 if (LCD_Cursor>=0 && LCD_Cursor<16) {LCD_Row=0; LCD_Col=LCD_Cursor;} // set the row and column
-if (LCD_Cursor>15 && LCD_Cursor<33) {LCD_Row=1; LCD_Col=LCD_Cursor-16; } //LCD_Cursor-64; // set the row and column	
+if (LCD_Cursor>15 && LCD_Cursor<33) {LCD_Row=1; LCD_Col=LCD_Cursor-16; }  // set the row and column	
 	
 }
 
@@ -468,6 +466,7 @@ int main(void)
 			
 		//this scans the Joystick potentiometers on PORTA A0, A1, A2, A3  [Bytes 0-3] & moving averages them
 		scanPots ();
+		PORTB &= ~(1<<INTRPT_OUT); //drive interrupt line to signal Master to request initial pot state
 		
 		//Check to see if a movement is within Fine-Scan Delta, if so, go into Fine Adjust mode
 		if (potFineAdjMode==0)
@@ -478,7 +477,7 @@ int main(void)
 				potState[1] < (prev_potState[1]-potScanDelta)  || potState[1] > (prev_potState[1]+potScanDelta) ||
 				potState[2] < (prev_potState[2]-potScanDelta)  || potState[2] > (prev_potState[2]+potScanDelta) ||
 				potState[3] < (prev_potState[3]-potScanDelta)  || potState[3] > (prev_potState[3]+potScanDelta))
-				{PORTB |= (1<<INTRPT_OUT); potFineAdjMode = 1; decay=potScanDecay;
+				{PORTB &= ~(1<<INTRPT_OUT); potFineAdjMode = 1; decay=potScanDecay;
 				//set the prev_potState to the current for the next time around
 				prev_potState[0] = potState[0];
 				prev_potState[1] = potState[1];
@@ -495,7 +494,7 @@ int main(void)
 			//if so raise the interrupt line to signal the Master to request the state message
 			if (potState[0] != prev_potState[0] || potState[1] != prev_potState[1] ||
 				potState[2] != prev_potState[2] || potState[3] != prev_potState[3])
-				{PORTB |= (1<<INTRPT_OUT);
+				{PORTB &= ~(1<<INTRPT_OUT); 
 				//set the prev_potState to the current for the next time around
 				prev_potState[0] = potState[0];
 				prev_potState[1] = potState[1];
@@ -509,7 +508,7 @@ int main(void)
 			scanEncoders ();
 			
 			if (encState[0] != prev_encState[0] || encState[1] != prev_encState[1] || encState[2] != prev_encState[2] || encState[3] != prev_encState[3])
-			{PORTB |= (1<<INTRPT_OUT);
+			{PORTB &= ~(1<<INTRPT_OUT); 
 			//set the prev_potState to the current for the next time around
 			prev_encState[0] = encState[0];
 			prev_encState[1] = encState[1];
@@ -522,7 +521,7 @@ int main(void)
 		getButtonsPortB(RENC3BTN,4); getButtonsPortB(RENC4BTN,5); 
 		
 		if (sensorBuffer[8] != prev_BtnState)
-		{PORTB |= (1<<INTRPT_OUT); // if the button scanned condition is different than the last scan, activate the interrupt line
+		{PORTB &= ~(1<<INTRPT_OUT);  // if the button scanned condition is different than the last scan, activate the interrupt line LOW
 		prev_BtnState = sensorBuffer[8];} // set the previous state to the recent state for next time around
 		
 		
