@@ -7,6 +7,11 @@
 //Definitions for MCU Clock Frequency
 #define 	F_CPU   16000000
 
+#define bit_is_set(sfr,bit) \
+(_SFR_BYTE(sfr) & _BV(bit))
+#define bit_is_clear(sfr,bit) \
+(!(_SFR_BYTE(sfr) & _BV(bit)))
+
 
 #define MISO 6			//PORTB
 #define MOSI 5			//PORTB
@@ -32,7 +37,7 @@
 #define RENC2BTN 7 //RotaryEncoder2 Button  PORTA
 
 
-
+#define RENCPORT PORTD // the port the encoders are on
 #define RENC1A 0 //RotaryEncoder 1 A  PORTD
 #define RENC1B 1 //RotaryEncoder 1 B  PORTD
 #define RENC2A 2 //RotaryEncoder 2 A  PORTD
@@ -46,8 +51,12 @@
 #define RSTAVR 0x1F //reset the AVR, soft reset.
 #define REQSTAT 0x10 //request the sensor status, acknowledge the interrupt signal
 #define PSHSTA 0x11 //push the sensor status message through the buffer
-#define SMPLLO 0x12 //
-#define SMPLHI 0x1E //
+//#define SMPLLO 0x12 //
+//#define SMPLHI 0x1E //
+#define ROTENC1ZERO 0x12
+#define ROTENC2ZERO 0x13
+#define ROTENC3ZERO 0x14
+#define ROTENC4ZERO 0x15
 #define LCDCMDLO 0x80 //LCD Command Lowest Allowable Value
 #define LCDCMDHI 0x9F //LCD Command Highest Allowable Value
 #define LCDCHAR0LO 0x00 //LCD Character Block0 Lowest Allowable Value, Custom character area
@@ -59,7 +68,6 @@
 
 #define Reset_AVR() wdt_enable(WDTO_30MS); while(1) {} // this macro will reset the AVR by the watchdog timer
 
-	
 #include <avr/io.h>
 #include <stdio.h>
 #include <util/delay.h>
@@ -81,6 +89,8 @@ volatile int frame_index=0;
 //unsigned int prev_buttonState[64];
 int potState[4];
 int prev_potState[4];
+int encState[4];
+int prev_encState[4];
 unsigned int prev_BtnState;
 volatile int sensorBuffer[9];
 unsigned char btnPressed =0;
@@ -97,12 +107,16 @@ volatile char LCDBuffer[80]; //characters for display buffer
 volatile int LCDBuffer_index=0; //Index to track character placement
 char LCDDisplay[80]; //characters for display  
 int LCDDisplay_index=0; //Index to track character placement
-char LCDCharacter; //these are the characters pulled from the buffer
+unsigned char LCDCharacter; //these are the characters pulled from the buffer
 char LCDCommandMode =0; // LCD CommandMode Flag
 
 signed char LCD_Cursor=0; // tracks LCD cursor location
 unsigned char LCD_Row=0;
 unsigned char LCD_Col=0;
+
+
+//====rotary encoder variables
+int RotaryEncCounter[4] = {128,128,128,128};
 
 /*********************************************************
 			Interrupt Service Routines
@@ -127,9 +141,16 @@ ISR (SPI_STC_vect)
 		{SPDR = sensorBuffer[frame_index++];}
 		if (value==RSTAVR)      // reset the AVR if commanded by the SPI Master
 		{Reset_AVR();}
-		if ((value >= SMPLLO) && (value <= SMPLHI)) // this means the Master is resetting the Sample input value from the default value, to
-		{samples = (value-17)*5 ;}// (value - 17)  x 5, = [[[ 5 - 65 samples possible]]]
-		
+		//if ((value >= SMPLLO) && (value <= SMPLHI)) // this means the Master is resetting the Sample input value from the default value, to
+		//{samples = (value-17)*5 ;}// (value - 17)  x 5, = [[[ 5 - 65 samples possible]]]
+		if (value == ROTENC1ZERO) // this indicates a command to zero the rotary encoder counter
+		{RotaryEncCounter[0] =128;}
+			if (value == ROTENC2ZERO) // this indicates a command to zero the rotary encoder counter
+			{RotaryEncCounter[1] =128;}
+				if (value == ROTENC3ZERO) // this indicates a command to zero the rotary encoder counter
+				{RotaryEncCounter[2] =128;}
+					if (value == ROTENC4ZERO) // this indicates a command to zero the rotary encoder counter
+					{RotaryEncCounter[3] =128;}
 		
 		//LCD
 		//Anything within these limits must be allowable LCD commands or text characters to the LCD so handle that way
@@ -237,16 +258,52 @@ void scanPots (void)
 	potState[3] = sensorBuffer[3];// set the JOY2Y value locally	
 }
 
+
 void scanEncoders (void)
 {
- sensorBuffer[4] = 255; //encoder1
- sensorBuffer[5] = 255; //encoder2
- sensorBuffer[6] = 255; //encoder3
- sensorBuffer[7] = 255;	//encoder4
- ///=/=/=/=/=/=
-//more handling here once I figure out how to read encoders
-//=/=/=/=/=/=/=/
+
+static int oldA[4];
+static int oldB[4];
+
+int newA[4]; 
+int newB[4];
+if (PIND & _BV(RENC1A)) {newA[0]=1;} else {newA[0]=0;}  //rotary encoder 1A
+if (PIND & _BV(RENC1B)) {newB[0]=1;} else {newB[0]=0;}  //rotary encoder 1B
+if (PIND & _BV(RENC2A)) {newA[1]=1;} else {newA[1]=0;}  //rotary encoder 1A
+if (PIND & _BV(RENC2B)) {newB[1]=1;} else {newB[1]=0;}  //rotary encoder 1B
+if (PIND & _BV(RENC3A)) {newA[2]=1;} else {newA[2]=0;}  //rotary encoder 1A
+if (PIND & _BV(RENC3B)) {newB[2]=1;} else {newB[2]=0;}  //rotary encoder 1B	
+if (PIND & _BV(RENC4A)) {newA[3]=1;} else {newA[3]=0;}  //rotary encoder 1A
+if (PIND & _BV(RENC4B)) {newB[3]=1;} else {newB[3]=0;}  //rotary encoder 1B
+
+for (int i=0; i<4; i++)
+{
+if ((newA[i] == newB[i]) && (oldA[i] != newA[i]) && (oldB[i] == newB[i]))	//
+	{RotaryEncCounter[i]--;} // direction is left, minus one from counter
+	else if ((newA[i] == newB[i]) && (oldB[i] != newA[i]) && (oldA[i] == newA[i]))	
+	{RotaryEncCounter[i]++;} //direction is right, add one to counter
+	else if ((newA[i] != newB[i]) && (oldA[i] != newA[i]) && (oldB[i] == newB[i]))	//
+	{RotaryEncCounter[i]++;} // direction is left, minus one from counter
+	else if ((newA[i] != newB[i]) && (oldB[i] != newB[i]) && (oldA[i] == newA[i]))
+    {RotaryEncCounter[i]--;}	//direction is right, add one to counter	
+
+if (RotaryEncCounter[i] > 255) {RotaryEncCounter[i] = 255;}
+else if (RotaryEncCounter[i] < 1) {RotaryEncCounter[i] = 1;}
+				
+oldA[i] = newA[i];
+oldB[i] = newB[i];
 }
+
+ sensorBuffer[4] = RotaryEncCounter[0]; //encoder1
+ sensorBuffer[5] = RotaryEncCounter[1]; //encoder2
+ sensorBuffer[6] = RotaryEncCounter[2]; //encoder3
+ sensorBuffer[7] = RotaryEncCounter[3]; //encoder4
+ encState[0] = sensorBuffer[4];// set the JOY1X value locally
+ encState[1] = sensorBuffer[5];// set the JOY1Y value locally
+ encState[2] = sensorBuffer[6];// set the JOY2X value locally
+ encState[3] = sensorBuffer[7];// set the JOY2Y value locally
+}
+
 
 
 void getButtonsPortA(unsigned int ADCpin, unsigned char bit)
@@ -260,88 +317,7 @@ void getButtonsPortB(unsigned int ADCpin, unsigned char bit)
 	else {sensorBuffer[8] &= ~(1<<bit);} // set the RELEASED 0 value in the buffer
 }
 
-
-
-
-
-//==================LCD LIBRARY FUNCTIONS=======================
-//#define 	lcd_puts_P(__s)   lcd_puts_p(PSTR(__s))
-//	macros for automatically storing string constant in program memory
-
-//void 	lcd_init (uint8_t dispAttr)
-//	Initialize display and select type of cursor.
-	//	Parameters:
-	//	dispAttr 	LCD_DISP_OFF display off
-	//	LCD_DISP_ON display on, cursor off
-	//	LCD_DISP_ON_CURSOR display on, cursor on
-	//	LCD_DISP_ON_CURSOR_BLINK display on, cursor on flashing
-	//	Returns:
-	//	none
-
-//void 	lcd_clrscr (void)	
-//	Clear display and set cursor to home position.
-	//	Parameters:
-	//	void
-	//	Returns:
-	//	none
-
-//void 	lcd_home (void)
-//	Set cursor to home position.
-	//	Parameters:
-	//	void
-	//	Returns:
-	//	none
-
-//void 	lcd_gotoxy (uint8_t x, uint8_t y)
-//	Set cursor to specified position.
-	//	Parameters:
-	//	x 	horizontal position
-	//	(0: left most position)
-	//	y 	vertical position
-	//	(0: first line)
-	//	Returns:
-	//	none
-
-//void 	lcd_putc (char c)
-//	Display character at current cursor position.
-	//	Parameters:
-	//	c 	character to be displayed
-	//	Returns:
-	//	none
-
-
-//void 	lcd_puts (const char *s)
-//	Display string without auto linefeed.
-	//	Parameters:
-	//	s 	string to be displayed
-	//	Returns:
-	//	none
-	
-//void 	lcd_puts_p (const char *progmem_s)
-//	Display string from program memory without auto linefeed.
-	//	Parameters:
-	//	s 	string from program memory be be displayed
-	//	Returns:
-	//	none
-	//	See also:
-	//	lcd_puts_P
-
-//void 	lcd_command (uint8_t cmd)
-//	Send LCD controller instruction command.
-	//	Parameters:
-	//	cmd 	instruction to send to LCD controller, see HD44780 data sheet
-	//	Returns:
-	//	none
-	
-//void 	lcd_data (uint8_t data)
-//	Send data byte to LCD controller.
-	//	Similar to lcd_putc(), but without interpreting LF
-	//	Parameters:
-	//	data 	byte to send to LCD controller, see HD44780 data sheet
-	//	Returns:
-	//	none
-
-
+//==============LCD Functions ==================
 void setLCDBrightness(unsigned char brightness)
 {
 	//SetBrightness on the LED Back-light of the LCD
@@ -350,18 +326,24 @@ void setLCDBrightness(unsigned char brightness)
 
 void updateLCDCursor()
 {//this function recalculates the cursor for the display
-if (LCD_Cursor==-1) {LCD_Cursor=79;} // move the cursor pointer to Row2 location
-if (LCD_Cursor==63) {LCD_Cursor=15;}	// move the cursor pointer to Row1 location
-if (LCD_Cursor==16) {LCD_Cursor=64;} // move the cursor pointer to Row2 location
-if (LCD_Cursor==80) {LCD_Cursor=0;}	// move the cursor pointer to Row1 location	
+//if (LCD_Cursor==-1) {LCD_Cursor=79;} // move the cursor pointer to Row2 location
+//if (LCD_Cursor==63) {LCD_Cursor=15;}	// move the cursor pointer to Row1 location
+//if (LCD_Cursor==16) {LCD_Cursor=64;} // move the cursor pointer to Row2 location
+//if (LCD_Cursor==80) {LCD_Cursor=0;}	// move the cursor pointer to Row1 location	
 if (LCD_Cursor>=0 && LCD_Cursor<16) {LCD_Row=0; LCD_Col=LCD_Cursor;} // set the row and column
-if (LCD_Cursor>63 && LCD_Cursor<80) {LCD_Row=1; LCD_Col=LCD_Cursor-64;} // set the row and column	
+if (LCD_Cursor>15 && LCD_Cursor<33) {LCD_Row=1; LCD_Col=LCD_Cursor-16; } //LCD_Cursor-64; // set the row and column	
 	
 }
 
+//===============INT (MAIN) =======================
 int main(void)
 {
-    
+    	//SetLCDBrightnessto OFF to start with
+    	setLCDBrightness(0);
+
+    	lcd_init (LCD_DISP_ON_CURSOR_BLINK);
+		
+		
 	decay = potScanDecay; // set decay
 	
 	ioinit ();	//Initialize the I/O and the SPI port
@@ -374,22 +356,19 @@ int main(void)
 		prev_potState[1] = potState[1];
 		prev_potState[2] = potState[2];
 		prev_potState[3] = potState[3];
-
-	//SetLCDBrightnessto OFF to start with
-	setLCDBrightness(0);
-
-	lcd_init (LCD_DISP_ON_CURSOR_BLINK);
-				
+		
+	//scan the encoders 
+	scanEncoders ();
+		//set the prev_potState to the current for the next time around
+		prev_encState[0] = encState[0];
+		prev_encState[1] = encState[1];
+		prev_encState[2] = encState[2];
+		prev_encState[3] = encState[3];
+		
+  				
 	while(1)
     {
         
-		//blinky test
-		//setLCDBrightness(0);
-		//_delay_ms(1000);
-		//setLCDBrightness(255);
-		//_delay_ms(1000);
-		
-		
 		//UPDATE THE LCD DISPLAY BUFFER TO MATCH THE LCD INCOMING BUFFER===================
 		if (LCDDisplay_index != LCDBuffer_index)
 		{LCDDisplay[LCDDisplay_index] = LCDBuffer[LCDDisplay_index]; 
@@ -445,7 +424,7 @@ int main(void)
 					
 					//Set Cursor Position
 					if (LCDCharacter >= 128 && LCDCharacter <= 208)  // 128dec / 0x80+ cursor location
-					{LCD_Cursor = LCDCharacter - 128; updateLCDCursor(); lcd_gotoxy (LCD_Col, LCD_Row);}
+					{LCD_Cursor = LCDCharacter-128; updateLCDCursor(); lcd_gotoxy (LCD_Col, LCD_Row);}
 					
 				}
 				
@@ -483,13 +462,7 @@ int main(void)
 		//if (updateLCD==1)
 		//{lcd_gotoxy(0,0); lcd_putc(LCDCharacter); updateLCD=0; setLCDBrightness(0);}
         // LCDBuffer
-		
-	
 
-
-		
-		
-		
 		//END OF LCD CONTROL======================
 		
 			
@@ -532,8 +505,17 @@ int main(void)
 			decay--; if (decay == 0) {potFineAdjMode = 0;} // if decay has run to zero, then exit fine-scan mode
 		}
 		
-		
+			//scan the encoders
+			scanEncoders ();
 			
+			if (encState[0] != prev_encState[0] || encState[1] != prev_encState[1] || encState[2] != prev_encState[2] || encState[3] != prev_encState[3])
+			{PORTB |= (1<<INTRPT_OUT);
+			//set the prev_potState to the current for the next time around
+			prev_encState[0] = encState[0];
+			prev_encState[1] = encState[1];
+			prev_encState[2] = encState[2];
+			prev_encState[3] = encState[3];
+			}
 		
 		// get Button state and set bits if pressed
 		getButtonsPortA(JOY1BTN,0); getButtonsPortA(JOY2BTN,1); getButtonsPortA(RENC1BTN,2); getButtonsPortA(RENC2BTN,3);
@@ -542,6 +524,9 @@ int main(void)
 		if (sensorBuffer[8] != prev_BtnState)
 		{PORTB |= (1<<INTRPT_OUT); // if the button scanned condition is different than the last scan, activate the interrupt line
 		prev_BtnState = sensorBuffer[8];} // set the previous state to the recent state for next time around
+		
+		
+
 	}
 	return (0);
 }
